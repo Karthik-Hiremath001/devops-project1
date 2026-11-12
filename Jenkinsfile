@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -47,11 +48,44 @@ pipeline {
                 '''
             }
         }
+
+        stage('Deploy to EC2') {
+            steps {
+                sshagent(credentials: ['ec2-ssh-key']) {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=accept-new ec2-user@98.80.6.203 'bash -s' <<'EOF'
+set -e
+
+IMAGE="karthikops/prod:latest"
+CONTAINER="devops-react-app"
+
+echo "Pulling production image..."
+docker pull "$IMAGE"
+
+echo "Removing old container..."
+docker rm -f "$CONTAINER" 2>/dev/null || true
+
+echo "Starting new production container..."
+docker run -d \
+    --name "$CONTAINER" \
+    --restart unless-stopped \
+    -p 80:80 \
+    "$IMAGE"
+
+echo "Checking deployment..."
+docker ps --filter "name=$CONTAINER"
+
+echo "Production deployment completed!"
+EOF
+                    '''
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo 'Production image built and pushed successfully!'
+            echo 'Production image built, pushed and deployed successfully!'
         }
         failure {
             echo 'Production pipeline failed. Check the stage logs.'
